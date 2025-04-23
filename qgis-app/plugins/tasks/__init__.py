@@ -3,4 +3,7 @@ from plugins.tasks.update_qgis_versions import update_qgis_versions
 from plugins.tasks.rebuild_search_index import rebuild_search_index
 from plugins.tasks.get_sustaining_members import get_sustaining_members
 from plugins.tasks.run_security_scan import run_security_scan_task
+from plugins.tasks.rebuild_search_index import rebuild_search_index
+from plugins.tasks.save_qt6_result import save_qt6_result
+from plugins.tasks.update_qgis_versions import update_qgis_versions
 from plugins.tasks.delete_marked_plugins import delete_marked_plugins
