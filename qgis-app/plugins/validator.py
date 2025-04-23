@@ -10,12 +10,15 @@ import re
 import zipfile
 from io import StringIO
 from urllib.parse import urlparse
+import shutil
 
 import requests
 from django.conf import settings
-from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.files.uploadedfile import SimpleUploadedFile, InMemoryUploadedFile, TemporaryUploadedFile
 from django.forms import ValidationError
 from django.utils.translation import gettext_lazy as _
+from .celery import app
+
 
 PLUGIN_MAX_UPLOAD_SIZE = getattr(settings, "PLUGIN_MAX_UPLOAD_SIZE", 25000000)  # 25 mb
 PLUGIN_REQUIRED_METADATA = getattr(
@@ -148,6 +151,37 @@ def _check_url_link(urls):
             )
     )
 
+def save_zip_to_shared_dir(package, target_dir="/home/web/shared", unzip_dir="/home/web/shared"):
+    """
+    Save the uploaded zip file to the shared directory and unzip it to a specified directory.
+    Supports InMemoryUploadedFile and TemporaryUploadedFile.
+    Returns the full path of the saved file and the path to the unzipped contents.
+    """
+
+    os.makedirs(target_dir, exist_ok=True)
+    
+    destination_path = os.path.join(target_dir, package.name)
+    unzip_path =os.path.join(unzip_dir, package.name)
+
+    if isinstance(package, InMemoryUploadedFile):
+        with open(destination_path, 'wb+') as dest:
+            for chunk in package.chunks():
+                dest.write(chunk)
+
+    elif isinstance(package, TemporaryUploadedFile):
+        shutil.copy(package.temporary_file_path(), destination_path)
+
+    else:
+        raise TypeError(f"Unsupported uploaded file type: {type(package)}")
+
+    os.makedirs(unzip_dir, exist_ok=True)
+    
+
+    with zipfile.ZipFile(destination_path, 'r') as zip_ref:
+        zip_ref.extractall(unzip_dir)
+
+    
+    return destination_path, unzip_dir
 
 def validator(package, is_new: bool = False):
     """
@@ -165,6 +199,7 @@ def validator(package, is_new: bool = False):
         * New plugins package_name is PEP8 compliant
 
     """
+    
     try:
         if package.size > PLUGIN_MAX_UPLOAD_SIZE:
             raise ValidationError(
@@ -208,6 +243,26 @@ def validator(package, is_new: bool = False):
                         "cannot contain <strong> '%s' </strong> directory. However, it has been found at <strong> '%s' </strong>." % (forbidden_dir, zname)
                     )
                 )
+
+    # Save the uploaded zip file to shared directory
+    try:
+        _, unzip_dir = save_zip_to_shared_dir(package)
+
+
+        #######################################
+        #######################################
+        ################# ICI #################
+        #################  ⏷  #################
+
+        app.send_task("run_qgis_script", kwargs=unzip_dir)
+        #######################################
+        #######################################
+        #######################################
+        #######################################
+
+    except Exception as e:
+        raise ValidationError(_("Could not save file to shared directory: %s") % str(e))
+
     bad_file = zip.testzip()
     if bad_file:
         zip.close()

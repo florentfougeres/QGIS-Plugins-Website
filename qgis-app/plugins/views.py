@@ -496,7 +496,7 @@ def plugin_upload(request):
 
                 new_version = PluginVersion(**version_data)
                 new_version.save()
-                msg = _("The Plugin has been successfully created.")
+                msg = _("The Plugin has been successfully created. A Qt6 compliance check will be launched. You'll receive the results by email.")
                 messages.success(request, msg, fail_silently=True)
 
                 # Update plugins cached xml
